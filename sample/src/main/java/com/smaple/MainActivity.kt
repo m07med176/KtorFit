@@ -21,14 +21,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ktorfit.Result
 import com.ktorfit.asResult
-import com.smaple.data.ktor.KtorBuilder.createHttpClient
-import com.smaple.data.ktor.KtorService
 import com.smaple.data.models.Product
 import com.smaple.data.proxy.KtorFitBuilder
 import com.smaple.data.proxy.KtorFitBuilder.create
-import com.smaple.data.proxy.ServiceApiNew
-import com.smaple.data.repository.Repository
-import com.smaple.data.retrofit.RetrofitInstance
+import com.smaple.data.proxy.ServiceApiKtor
 import com.smaple.ui.theme.KtorfitTheme
 import kotlinx.coroutines.flow.flowOf
 
@@ -45,38 +41,36 @@ class MainActivity : ComponentActivity() {
         setContent {
             KtorfitTheme {
 
-                var state by remember { mutableStateOf(UIState<List<Product>>()) }
+                var state by remember { mutableStateOf(UIState<Product>()) }
 
                 LaunchedEffect(true){
 //                    val retro = RetrofitInstance.api.getAllProducts().body()?.products
 //                    state = state.copy(data = retro)
 
-                    val proxy = KtorFitBuilder.createHttpClient().create(ServiceApiNew::class.java)
-                    val data  = proxy.getAllProducts()
-                   state = state.copy(data = data.products)
+                    val proxy = KtorFitBuilder.createHttpClient().create(ServiceApiKtor::class.java)
+                    val data  = proxy.getSingleProduct(1)
 
-                   // println(data)
-//                    val httpClient = createHttpClient()
-//                    val service = KtorService(httpClient)
-//                    flowOf(Repository(service).getAllProducts()).asResult().collect{ result->
-//                        state = when(result){
-//                            is Result.Error -> state.copy(error = result.exception.message, idle = false, loading = false)
-//                            is Result.Idle -> state.copy( idle = true, loading = false)
-//                            is Result.Loading -> state.copy( idle = false, loading = true)
-//                            is Result.Success -> state.copy( idle = false, loading = false, data = result.data.products)
-//                        }
-//                    }
+                    flowOf(data).asResult().collect{ result->
+                        state = when(result){
+                            is Result.Error -> state.copy(error = result.exception.message, idle = false, loading = false)
+                            is Result.Idle -> state.copy( idle = true, loading = false)
+                            is Result.Loading -> state.copy( idle = false, loading = true)
+                            is Result.Success -> state.copy( idle = false, loading = false, data = result.data)
+                        }
+                    }
 
                 }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    LazyColumn{
-                        items(state.data?: emptyList()){
-                            Text(text = it.title.toString(), modifier =  Modifier.padding(20.dp))
-                        }
-                    }
+
+
+                    Text(text = state.data.toString(), modifier =  Modifier.padding(20.dp))
+//                    LazyColumn{
+//                        items(state.data?: emptyList()){
+//                        }
+//                    }
                 }
             }
         }
@@ -98,4 +92,3 @@ fun GreetingPreview() {
         Greeting("Android")
     }
 }
-//}

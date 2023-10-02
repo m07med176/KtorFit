@@ -1,14 +1,15 @@
 package com.smaple.data.proxy
 
+
+import android.os.Build
+import androidx.annotation.RequiresApi
 import com.smaple.data.comon.Endpoints
-import com.smaple.data.ktor.ServiceApi
-import com.smaple.data.ktor.getUrl
 import com.smaple.data.models.Product
 import com.smaple.data.models.ProductResponse
-import com.smaple.data.proxy.KtorFitBuilder.create
-import com.smaple.data.proxy.annotations.GET
+import com.smaple.data.proxy.annotations.interfaces.Ktorfit
+import com.smaple.data.proxy.annotations.methods.GET
+import com.smaple.data.proxy.annotations.parameters.Path
 import io.ktor.client.HttpClient
-import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpCallValidator
 import io.ktor.client.plugins.HttpRequestRetry
@@ -24,14 +25,13 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
-import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import kotlin.coroutines.Continuation
 
 
-object KtorFitBuilder{
+object KtorFitBuilder {
     fun createHttpClient( enableNetworkLogs: Boolean = true):HttpClient =
         HttpClient(OkHttp) {
             defaultRequest {
@@ -39,18 +39,17 @@ object KtorFitBuilder{
                 header("Accept", "application/json")
             }
 
-            // exception handling
             install(HttpTimeout) {
-                requestTimeoutMillis = 10000
-                connectTimeoutMillis = 10000
-                socketTimeoutMillis = 10000
+                requestTimeoutMillis    = 10000
+                connectTimeoutMillis    = 10000
+                socketTimeoutMillis     = 10000
             }
 
             install(HttpRequestRetry) {
                 maxRetries = 3
                 retryIf { _, response -> !response.status.isSuccess() }
                 retryOnExceptionIf { _, cause -> cause is HttpRequestTimeoutException }
-                delayMillis { 3000L } // retries in 3, 6, 9, etc. seconds
+                delayMillis { 3000L }
             }
 
             install(HttpCallValidator) {
@@ -68,6 +67,7 @@ object KtorFitBuilder{
                     }
                 )
             }
+
             if (enableNetworkLogs) {
                 install(Logging) {
                     logger = Logger.SIMPLE
@@ -76,66 +76,128 @@ object KtorFitBuilder{
             }
         }
 
-
-    internal inline fun <reified T> HttpClient.create(service: Class<T>): T {
+    @RequiresApi(Build.VERSION_CODES.O)
+    internal inline fun <reified T : Any> HttpClient.create(service: Class<T>): T {
         serviceValidation(service)
-        return Proxy.newProxyInstance(
-            T::class.java.classLoader,
-            arrayOf<Class<*>>(T::class.java),
-        ) { proxy, method, args ->
 
-            method.annotations.forEach { _ ->
-                if (method.isAnnotationPresent(GET::class.java)) {
-                    val endPoint = method.getAnnotation(GET::class.java)
-                    endPoint?.let {
-                        runBlocking {
-                            this@create.get(Endpoints.BASE_URL + "/" + endPoint.value)
-                                .body() as ProductResponse
+        val baseUrl = handleBackSlash(service.getAnnotation(Ktorfit::class.java)?.url!!)
+
+        return proxy(contract = service) { method, _ ->
+            if (method.isAnnotationPresent(GET::class.java)) {
+                var paths = ""
+                method.parameters.forEach {
+                    require(method.annotations.size <=1){ "You should to put only one annotations" }
+                    if(it.isAnnotationPresent(Path::class.java)){
+                        val path = method.getAnnotation(Path::class.java)?.value
+                        paths += if (path != null) {
+                            "/$path"
+                        } else {
+                            "/${it.name}"
                         }
                     }
                 }
-            }
-            runBlocking {
-                this@create.get(Endpoints.GET_ALL_PRODUCT).body() as ProductResponse
 
+                val endPoint = method.getAnnotation(GET::class.java)?.value ?: ""
+
+                val urlRequest = "${resolveSlashes(baseUrl)}${resolveSlashes(endPoint)}${resolveSlashes(paths)}"
+                this@create.get(urlRequest) as Product
+            }else{
+                Product(category = "g")
             }
-        } as T
+
+        }
+    }
+    internal fun requestValidation(method:Method) {
+        require(method.returnType.name == ProductResponse::class.java.name){"You fdshgfhg54 654 s"}
     }
 
     internal fun serviceValidation(service:Class<*>) {
         require(service.isInterface){"You should to use interface class"}
-    }
-}
-
-interface ServiceApiNew {
-
-    @GET(Endpoints.GET_ALL_PRODUCT_RETRO)
-    fun getAllProducts(): ProductResponse
-
-}
-
-
-
-object ImplementationTest {
-    @JvmStatic
-    fun main(args: Array<String>) {
-
-        val proxy = KtorFitBuilder.createHttpClient().create(ServiceApiNew::class.java)
-        val data  = proxy.getAllProducts()
-        println(data)
+        require(service.isAnnotationPresent(Ktorfit::class.java)){"You should to put annotation of `ktorfit` at top of Interface "}
+        require(isValidURL(service.getAnnotation(Ktorfit::class.java)?.url)){"You should to put valid URL in `ktorfit` annotation "}
     }
 }
 
 
 
+typealias SuspendInvoker = suspend (method: Method, arguments: List<Any?>) -> Any?
+
+private interface SuspendFunction {
+    suspend fun invoke(): Any?
+}
+
+private val SuspendRemover = SuspendFunction::class.java.methods[0]
+
+@Suppress("UNCHECKED_CAST")
+fun <T : Any> proxy(contract: Class<T>, invoker: SuspendInvoker): T =
+    Proxy.newProxyInstance(contract.classLoader, arrayOf(contract)) { _, method, arguments ->
+        val continuation = arguments.last() as Continuation<*>
+        val argumentsWithoutContinuation = arguments.take(arguments.size - 1)
+        SuspendRemover.invoke(object : SuspendFunction {
+            override suspend fun invoke() = invoker(method, argumentsWithoutContinuation)
+        }, continuation)
+    } as T
+
+
+// Reflection
+// Proxy
+// Continuation
+// Annotations
+// Documentation
+// Versions of Libraries
+// Licences
+// Exceptions
+
+
+fun resolveSlashes(input: String):String =
+    removeLeadingSlash(input)
+        .apply { removeExtraSlashes(input) }
+        .apply { handleBackSlash(this) }
+fun removeExtraSlashes(input: String): String  = input.replace(Regex("/+"), "/")
+
+fun isValidURL(url: String?): Boolean {
+    if (url==null) return false
+    val regex = """^(https?)://[^\s/$.?#].[^\s]*$""".toRegex()
+    return regex.matches(url)
+}
+fun removeLeadingSlash(input: String): String {
+    return input.removePrefix("/")
+}
 
 
 
+private fun handleBackSlash(url: String): String {
+    return if (!url.endsWith("/")) {
+        "$url/"
+    } else {
+        url
+    }
+}
+fun main() {
+    val urls = listOf(
+        "https://dummyjson.com",
+        "ftp://example.com",
+        "http://localhost:8080/",
+        "invalid-url",
+        "https://with spaces.com"
+    )
 
 
+    for (url in urls) {
+        val isValid = isValidURL(url)
+        if (isValid){
+
+        println("$url is valid: ${handleBackSlash(url)}")
+        }
+    }
 
 
+    val input1 = "/example/path"
+    val input2 = "noLeadingSlash"
 
+    val result1 = removeLeadingSlash(input1)
+    val result2 = removeLeadingSlash(input2)
 
-//        val invocationHandler: Class<*> = Proxy.getInvocationHandler(proxy).javaClass
-//        println(invocationHandler.name)
+    println(result1) // Output: "example/path"
+    println(result2) // Output: "noLeadingSlash"
+}
