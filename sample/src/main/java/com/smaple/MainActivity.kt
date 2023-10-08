@@ -43,23 +43,23 @@ class MainActivity : ComponentActivity() {
 
                 var state by remember { mutableStateOf(UIState<Product>()) }
 
-                LaunchedEffect(true){
-//                    val retro = RetrofitInstance.api.getAllProducts().body()?.products
-//                    state = state.copy(data = retro)
-
-                    val proxy = KtorFitBuilder.createHttpClient().create(ServiceApiKtor::class.java)
-                    val data  = proxy.getSingleProduct(1)
-
-                    flowOf(data).asResult().collect{ result->
-                        state = when(result){
-                            is Result.Error -> state.copy(error = result.exception.message, idle = false, loading = false)
-                            is Result.Idle -> state.copy( idle = true, loading = false)
-                            is Result.Loading -> state.copy( idle = false, loading = true)
-                            is Result.Success -> state.copy( idle = false, loading = false, data = result.data)
-                        }
-                    }
-
-                }
+//                LaunchedEffect(true){
+////                    val retro = RetrofitInstance.api.getAllProducts().body()?.products
+////                    state = state.copy(data = retro)
+//
+//                    val proxy = KtorFitBuilder.createHttpClient().create(ServiceApiKtor::class.java)
+//                    val data  = proxy.getSingleProduct(1)
+//
+//                    flowOf(data).asResult().collect{ result->
+//                        state = when(result){
+//                            is Result.Error -> state.copy(error = result.exception.message, idle = false, loading = false)
+//                            is Result.Idle -> state.copy( idle = true, loading = false)
+//                            is Result.Loading -> state.copy( idle = false, loading = true)
+//                            is Result.Success -> state.copy( idle = false, loading = false, data = result.data)
+//                        }
+//                    }
+//
+//                }
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background

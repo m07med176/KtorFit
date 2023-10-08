@@ -6,5 +6,5 @@ object Endpoints {
     const val GET_SINGLE_PRODUCT = "$BASE_URL/products/{productId}"
 
     const val GET_ALL_PRODUCT_RETRO = "products"
-    const val GET_SINGLE_PRODUCT_RETRO = "products"
+    const val GET_SINGLE_PRODUCT_RETRO = "products/{productId}"
 }
